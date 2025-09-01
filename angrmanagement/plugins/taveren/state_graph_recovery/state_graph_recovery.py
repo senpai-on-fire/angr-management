@@ -529,6 +529,8 @@ class StateGraphRecoveryAnalysis(Analysis):
 
             transition = (prev_prev_abs, prev_abs_state, abs_state)
             if switched_on and transition in known_transitions:
+                # update progress
+                self.set_progress(state_queue)
                 continue
 
             known_transitions.append(transition)
@@ -867,18 +869,21 @@ class StateGraphRecoveryAnalysis(Analysis):
                 self._job_state_callback is not None and self._job_state_callback() is True
             ):
                 # update progress
-                ram_usage = self.ram_usage / (1024 * 1024)
-                txt = (
-                    f"{len(self.state_graph)} states, {len(self.state_graph.edges)} transitions | "
-                    f"{len(state_queue)} remaining jobs | "
-                    f"{ram_usage:0.2f} MB RAM"
-                )
-                self._update_progress(50.0, text=txt)
+                self.set_progress(state_queue)
 
         if self._job_state_callback is None or (
             self._job_state_callback is not None and self._job_state_callback() is True
         ):
             self._finish_progress()
+
+    def set_progress(self, state_queue: list) -> None:
+        ram_usage = self.ram_usage / (1024 * 1024)
+        txt = (
+            f"{len(self.state_graph)} states, {len(self.state_graph.edges)} transitions | "
+            f"{len(state_queue)} remaining jobs | "
+            f"{ram_usage:0.2f} MB RAM"
+        )
+        self._update_progress(50.0, text=txt)
 
     def _discover_time_deltas(self, state: SimState) -> list[tuple[int, claripy.ast.Base, tuple[int, int]]]:
         """

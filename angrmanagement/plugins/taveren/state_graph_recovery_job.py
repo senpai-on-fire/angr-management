@@ -60,4 +60,4 @@ class StateGraphRecoveryJob(InstanceJob):
             job_state_callback=self._check_job_state,
             progress_callback=ctx.set_progress,
         )
-        return sgr.state_graph
+        return sgr
