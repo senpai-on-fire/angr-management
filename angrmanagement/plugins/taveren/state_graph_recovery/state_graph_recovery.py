@@ -534,7 +534,10 @@ class StateGraphRecoveryAnalysis(Analysis):
             transition = (prev_prev_abs, prev_abs_state, abs_state)
             if switched_on and transition in known_transitions:
                 # update progress
-                self.set_progress(state_queue)
+                if self._job_state_callback is None or (
+                    self._job_state_callback is not None and self._job_state_callback() is True
+                ):
+                    self.set_progress(state_queue)
                 continue
 
             known_transitions.add(transition)
