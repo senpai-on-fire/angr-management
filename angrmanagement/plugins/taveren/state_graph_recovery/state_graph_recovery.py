@@ -854,6 +854,21 @@ class StateGraphRecoveryAnalysis(Analysis):
                     all_vars |= set(symbolic_throt.values())
                     all_vars |= self.config_vars
                     slice_gen = SliceGenerator(all_vars, bp=expression_bp)
+
+                    # are there duplicate transitions in the state queue?
+                    dup_found = False
+                    for ss in state_queue:
+                        if ss[1] == abs_state_id and ss[2] == abs_state and ss[3] == prev_abs_state:
+                            ss_throt = ss[4].get("throt", (None, None, None))
+                            if ss_throt[0] == throt_delta:
+                                print("[.] Duplicate transition found in state queue. Drop.")
+                                dup_found = True
+                                break
+
+                    if dup_found:
+                        # drop this transition as it is already in the queue
+                        continue
+
                     state_queue.append(
                         (
                             new_state,
