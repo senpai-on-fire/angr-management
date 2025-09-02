@@ -138,6 +138,8 @@ class StateGraphRecoveryAnalysis(Analysis):
         config_vars: set[claripy.ast.Base] | None = None,
         patch_callback: Callable | None = None,
         input_data: dict | None = None,
+        accurate_slice: bool = False,
+        pre_exec_addr: int | None = None,
         low_priority: bool = False,
         job_state_callback: Callable | None = None,
     ):
@@ -152,6 +154,8 @@ class StateGraphRecoveryAnalysis(Analysis):
         self.patch_callback = patch_callback
         self._low_priority = low_priority
         self._job_state_callback = job_state_callback
+        self._accurate_slice = accurate_slice
+        self._preexec_addr = pre_exec_addr
 
         self._time_addr = time_addr
         self._temp_addr = temp_addr
@@ -216,7 +220,7 @@ class StateGraphRecoveryAnalysis(Analysis):
         self.state_graph.add_node((("NODE_CTR", abs_state_id),) + abs_state, outvars=dict(abs_state))
 
         # FIXME:
-        init_state = self._traverse_one(init_state, exec_addr=0x800675D)
+        init_state = self._traverse_one(init_state, exec_addr=self._preexec_addr)
 
         state_queue = [(init_state, abs_state_id, abs_state, None, {})]
         if self._switch_on is None:
@@ -451,7 +455,7 @@ class StateGraphRecoveryAnalysis(Analysis):
             countdown_timer = 2  # how many iterations to execute before switching on
             switched_on = False
 
-        known_transitions = []
+        known_transitions = set()
         known_states = {}
 
         absstate_to_slice = {}
@@ -533,7 +537,7 @@ class StateGraphRecoveryAnalysis(Analysis):
                 self.set_progress(state_queue)
                 continue
 
-            known_transitions.append(transition)
+            known_transitions.add(transition)
             edge_data = {}
             edge_label = []
             if deltas.get("time", None) is not None:
@@ -1450,7 +1454,7 @@ class StateGraphRecoveryAnalysis(Analysis):
 
         # disable cross instruction optimization so that statement IDs in symbolic execution will match the ones used in
         # static analysis
-        s.options[NO_CROSS_INSN_OPT] = True
+        s.options[NO_CROSS_INSN_OPT] = self._accurate_slice
         # disable warnings
         s.options[SYMBOL_FILL_UNCONSTRAINED_MEMORY] = True
         s.options[SYMBOL_FILL_UNCONSTRAINED_REGISTERS] = True

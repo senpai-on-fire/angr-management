@@ -27,6 +27,8 @@ class StateGraphRecoveryJob(InstanceJob):
         switch_on: Callable | None = None,
         config_vars: set | None = None,
         input_data: dict | None = None,
+        accurate_slice: bool = False,
+        scan_cycle_pre_exec_addr: int | None = None,
         on_finish=None,
         blocking: bool = False,
         **kwargs,
@@ -42,6 +44,8 @@ class StateGraphRecoveryJob(InstanceJob):
         self.switch_on = switch_on
         self.config_vars = config_vars
         self.input_data = input_data if input_data is not None else {}
+        self.accurate_slice = accurate_slice
+        self.scan_cycle_pre_exec_addr = scan_cycle_pre_exec_addr
 
     def _check_job_state(self) -> bool:
         return self.state != JobState.CANCELLED
@@ -56,6 +60,8 @@ class StateGraphRecoveryJob(InstanceJob):
             switch_on=self.switch_on,
             config_vars=self.config_vars,
             input_data=self.input_data,
+            accurate_slice=self.accurate_slice,
+            pre_exec_addr=self.scan_cycle_pre_exec_addr,
             low_priority=True,
             job_state_callback=self._check_job_state,
             progress_callback=ctx.set_progress,

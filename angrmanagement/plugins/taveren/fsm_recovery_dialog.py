@@ -13,6 +13,7 @@ from networkx.drawing.nx_agraph import write_dot
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFileDialog,
     QHBoxLayout,
@@ -182,6 +183,14 @@ class RecoverFSMDialog(QDialog):
         toolbar.addAction(action_remove_mmio)
         toolbar.addSeparator()
 
+        # accurate slicing
+        self.chk_accurate_slicing = QCheckBox("Accurate Slicing", self)
+        self.chk_accurate_slicing.setToolTip(
+            "Enable accurate slicing for root-cause analysis. This is slower and "
+            "unnecessary for simple FSM recovery."
+        )
+        self.chk_accurate_slicing.setChecked(False)
+
         # Load JSON file
         lbl_load_json = QLabel("Load Configuration (JSON):")
         self.txt_load_json = QLineEdit()
@@ -227,19 +236,24 @@ class RecoverFSMDialog(QDialog):
         # run analysis
         self.run_button = QPushButton("Start Analysis")
         self.run_button.clicked.connect(self._on_start_analysis)
+        # save configuration as a JSON file
+        save_config_buttton = QPushButton("Save Configuration")
+        save_config_buttton.clicked.connect(self._on_save_configuration)
         # close dialog
-        close_button = QPushButton("Save and Close")
+        close_button = QPushButton("Close")
         close_button.clicked.connect(self.close)
 
         buttons = QHBoxLayout()
         buttons.addStretch()
         buttons.addWidget(self.run_button)
+        buttons.addWidget(save_config_buttton)
         buttons.addWidget(close_button)
         buttons.addStretch()
 
         layout = QVBoxLayout()
         layout.addWidget(toolbar)
         layout.addWidget(splitter)
+        layout.addWidget(self.chk_accurate_slicing)
         layout.addLayout(hbox_load_json)
         layout.addLayout(hbox_save_dot)
         layout.addLayout(buttons)
@@ -284,21 +298,41 @@ class RecoverFSMDialog(QDialog):
         self.config_tree.insertTopLevelItems(0, items)
         self.config_tree.expandAll()
 
-    def _create_scan_cycle_properties(self, root, func_name: str):
-        root.addChild(
-            TaverenTextPropertyItem("Function Name", func_name, "scan_cycle_function", ("scan_cycle_function",))
-        )
-
-    def _create_initializer_properties(self, root, func_name: str, early_exit: str):
-        root.addChild(
-            TaverenTextPropertyItem("Function Name", func_name, "initializer_function", ("initializer_function",))
-        )
+    def _create_scan_cycle_properties(self, root, func_name: str | int, pre_exec_addr: int | None):
         root.addChild(
             TaverenTextPropertyItem(
+                "Function Name",
+                func_name if isinstance(func_name, str) else hex(func_name),
+                "scan_cycle_function",
+                ("scan_cycle_function",),
+            )
+        )
+        root.addChild(
+            TaverenIntPropertyItem(
+                "Pre-execution Address (optional)",
+                pre_exec_addr if pre_exec_addr else 0,
+                "scan_cycle_pre_exec_addr",
+                ("scan_cycle_pre_exec_addr",),
+                show_hex=True,
+            )
+        )
+
+    def _create_initializer_properties(self, root, func_name: str | int, early_exit: str | int):
+        root.addChild(
+            TaverenTextPropertyItem(
+                "Function Name",
+                func_name if isinstance(func_name, str) else hex(func_name),
+                "initializer_function",
+                ("initializer_function",),
+            )
+        )
+        root.addChild(
+            TaverenIntPropertyItem(
                 "Execute Until... (optional)",
-                early_exit,
+                hex_or_int(early_exit) if early_exit else 0,
                 "initializer_function_early_exit",
                 ("initializer_function_early_exit",),
+                show_hex=True,
             )
         )
 
@@ -441,12 +475,16 @@ class RecoverFSMDialog(QDialog):
         if item.variable_name == "time_addr":
             self._create_time_addr_properties(root, self.config.get("time_addr", None))
         elif item.variable_name == "scan_cycle_function":
-            self._create_scan_cycle_properties(root, self.config.get("scan_cycle_function", "_start"))
+            self._create_scan_cycle_properties(
+                root,
+                self.config.get("scan_cycle_function", "_start"),
+                hex_or_int(self.config.get("scan_cycle_pre_exec_addr", None)),
+            )
         elif item.variable_name == "initializer_function":
             self._create_initializer_properties(
                 root,
                 self.config.get("initializer_function", ""),
-                self.config.get("initializer_function_early_exit", ""),
+                self.config.get("initializer_function_early_exit", 0),
             )
         elif item.variable_name == "software":
             self._create_software_properties(root, self.config.get("software", "beremiz"))
@@ -504,6 +542,11 @@ class RecoverFSMDialog(QDialog):
             self.config["software"] = value
         elif prop.key[0] == "scan_cycle_function":
             self.config["scan_cycle_function"] = value
+        elif prop.key[0] == "scan_cycle_pre_exec_addr":
+            if value == 0 or value is None:
+                self.config["scan_cycle_pre_exec_addr"] = None
+            else:
+                self.config["scan_cycle_pre_exec_addr"] = value
         elif prop.key[0] == "initializer_function":
             self.config["initializer_function"] = value
         elif prop.key[0] == "initializer_function_early_exit":
@@ -716,6 +759,24 @@ class RecoverFSMDialog(QDialog):
         state.memory.store(switch_value_addr, claripy.BVV(0x1, 8), endness=proj.arch.memory_endness)  # value
         state.memory.store(switch_flag_addr, claripy.BVV(0x2, 8), endness=proj.arch.memory_endness)  # flag
 
+    def _on_save_configuration(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Taveren: Save Configuration As...",
+            "",
+            "JSON file (*.json);;All files (*.*)",
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "w") as f:
+                json.dump(self.config, f, indent=4)
+            QMessageBox.information(self, "Taveren: Save Configuration", f"Configuration saved to {file_path}.")
+        except Exception as ex:
+            QMessageBox.critical(self, "Taveren: Save Configuration Error", f"Failed to save configuration: {ex}.")
+
     def _on_state_graph_recovery_finished(self, sgr: StateGraphRecoveryAnalysis):
 
         g = sgr.state_graph
@@ -745,7 +806,13 @@ class RecoverFSMDialog(QDialog):
         data = self.config
 
         scan_cycle_func_name = hex_or_string(data["scan_cycle_function"])
-        initializer_func_name = data["initializer_function"]
+        scan_cycle_pre_exec_addr = (
+            hex_or_int(data["scan_cycle_pre_exec_addr"]) if "scan_cycle_pre_exec_addr" in data else None
+        )
+        if scan_cycle_pre_exec_addr == 0:
+            # FIXME: This is a hack that prevents scan_cycle_pre_exec_addr from being 0
+            scan_cycle_pre_exec_addr = None
+        initializer_func_name: str | int = data["initializer_function"]
         initializer_func_early_exit = hex_or_string(data.get("initializer_function_early_exit", None))
         # mmio initializers
         mmio_setup = data.get("initializer_mmio_setup", [])
@@ -790,6 +857,8 @@ class RecoverFSMDialog(QDialog):
         else:
             raise ValueError(f"Cannot find the scan cycle address {scan_cycle_func_name}")
 
+        accurate_slice = self.chk_accurate_slicing.isChecked()
+
         job = StateGraphRecoveryJob(
             self.workspace.main_instance,
             start_addr,
@@ -802,6 +871,8 @@ class RecoverFSMDialog(QDialog):
             ),
             config_vars=set(config_vars.values()),
             input_data=input_fields,
+            accurate_slicing=accurate_slice,
+            pre_exec_addr=scan_cycle_pre_exec_addr,
             on_finish=self._on_state_graph_recovery_finished,
             blocking=True,
         )

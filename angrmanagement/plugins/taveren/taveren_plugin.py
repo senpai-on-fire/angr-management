@@ -35,6 +35,18 @@ class TaverenPlugin(BasePlugin):
         dlg = RecoverFSMDialog(self.workspace, config=self.config)
         dlg.exec_()
 
+    def _on_set_scan_cycle_start_triggered(self, addr: int):
+        self.config["scan_cycle_function"] = addr
+
+    def _on_set_scan_cycle_preexec_addr_triggered(self, addr: int):
+        self.config["scan_cycle_pre_exec_addr"] = addr
+
+    def _on_set_initializer_function_triggered(self, addr: int):
+        self.config["initializer_function"] = addr
+
+    def _on_set_initializer_function_early_exit_triggered(self, addr: int):
+        self.config["initializer_function_early_exit"] = addr
+
     def _on_add_mmio_entry_triggered(self, addr: int, size: int | None = None):
         dlg = RecoverFSMDialog(self.workspace, config=self.config)
         dlg.add_mmio_setup(addr, size=size)
@@ -77,8 +89,27 @@ class TaverenPlugin(BasePlugin):
 
     # Menus
 
+    def build_context_menu_insn(self, insn) -> Iterable[None | tuple[str, Callable]]:
+        yield None  # separator
+        yield "Taveren: Set as scan cycle start", partial(self._on_set_scan_cycle_start_triggered, insn.addr)
+        yield "Taveren: Set as scan cycle pre-execution point", partial(
+            self._on_set_scan_cycle_preexec_addr_triggered, insn.addr
+        )
+        yield "Taveren: Set as initialization function", partial(self._on_set_initializer_function_triggered, insn.addr)
+        yield "Taveren: End the execution of initialization function at this point", partial(
+            self._on_set_initializer_function_early_exit_triggered, insn.addr
+        )
+
     def build_context_menu_label(self, addr: int):
         yield None  # separator
+        yield "Taveren: Set as scan cycle start", partial(self._on_set_scan_cycle_start_triggered, addr)
+        yield "Taveren: Set as scan cycle pre-execution point", partial(
+            self._on_set_scan_cycle_preexec_addr_triggered, addr
+        )
+        yield "Taveren: Set as initialization function", partial(self._on_set_initializer_function_triggered, addr)
+        yield "Taveren: End the execution of initialization function at this point", partial(
+            self._on_set_initializer_function_early_exit_triggered, addr
+        )
         if not self._has_mmio_entry(addr):
             yield "Taveren: Add as an MMIO entry...", partial(self._on_add_mmio_entry_triggered, addr)
         else:
