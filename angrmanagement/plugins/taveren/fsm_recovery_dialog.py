@@ -350,24 +350,45 @@ class RecoverFSMDialog(QDialog):
                 prop.value = hex_or_int(props[prop.entry_name])
             root.addChild(prop)
 
-    def add_variable(self, addr: int | None):
+    def add_variable(self, addr: int | None, size: int | None = None):
         if "variables" not in self.config:
             self.config["variables"] = []
         d = {}
         if addr is not None:
             d["address"] = addr
+            d["size"] = size if size is not None else 1
         self.config["variables"].append(d)
         self._init_config_tree()
 
-    def add_mmio_setup(self, addr: int | None):
+        # select the right item
+        for i in range(self.config_tree.topLevelItemCount()):
+            item = self.config_tree.topLevelItem(i)
+            assert isinstance(item, TaverenConfigItem)
+            if item.variable_name == "variables" and item.childCount() > 0:
+                child_id = item.childCount() - 1
+                self.config_tree.setCurrentItem(item.child(child_id))
+                self._on_config_tree_item_clicked(item.child(child_id))
+                break
+
+    def add_mmio_setup(self, addr: int | None, size: int | None = None):
         if "initializer_mmio_setup" not in self.config:
             self.config["initializer_mmio_setup"] = []
         d = {}
         if addr is not None:
             d["address"] = addr
-            d["size"] = 1
+            d["size"] = size if size is not None else 1
         self.config["initializer_mmio_setup"].append(d)
         self._init_config_tree()
+
+        # select the right item
+        for i in range(self.config_tree.topLevelItemCount()):
+            item = self.config_tree.topLevelItem(i)
+            assert isinstance(item, TaverenConfigItem)
+            if item.variable_name == "initializer_mmio_setup" and item.childCount() > 0:
+                child_id = item.childCount() - 1
+                self.config_tree.setCurrentItem(item.child(child_id))
+                self._on_config_tree_item_clicked(item.child(child_id))
+                break
 
     #
     # Event handlers and callbacks
